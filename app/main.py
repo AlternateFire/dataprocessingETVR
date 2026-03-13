@@ -6,12 +6,12 @@ import uuid
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .video_processor import get_video_info, export_video_with_gaze
-from .gaze_processor import get_gaze_timeline
+from .gaze_processor import get_gaze_timeline, auto_suggest_calibration
 from .database import init_db, save_session, load_session, list_sessions, delete_session, update_session_output_sync
 
 BASE_DIR = Path(__file__).parent.parent
@@ -25,18 +25,11 @@ SESSIONS_DIR.mkdir(exist_ok=True)
 # Track export progress
 export_progress = {}
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_db()
-    yield
-    # Cleanup temp files on shutdown optional
+# API router - mount before static so /api/* is handled correctly (avoids 405 on POST)
+api = APIRouter(prefix="/api", tags=["api"])
 
 
-app = FastAPI(title="EyeTrackVR Gaze Processor", lifespan=lifespan)
-
-
-@app.post("/api/upload")
+@api.post("/upload")
 async def upload_files(
     video: UploadFile = File(...),
     csv: UploadFile = File(...),
@@ -55,12 +48,18 @@ async def upload_files(
         raise HTTPException(status_code=500, detail=str(e))
 
     info = get_video_info(str(video_path))
+    suggestions = auto_suggest_calibration(str(csv_path))
     timeline = get_gaze_timeline(
         str(csv_path),
         video_fps=info["fps"],
         video_width=info["width"],
         video_height=info["height"],
         video_frame_count=info["frame_count"],
+        time_offset_ms=suggestions["time_offset_ms"],
+        smooth_window=suggestions["smooth_window"],
+        mapping_mode=suggestions["mapping_mode"],
+        scale_x=suggestions["scale_x"],
+        scale_y=suggestions["scale_y"],
     )
 
     return {
@@ -70,10 +69,55 @@ async def upload_files(
         "video_info": info,
         "gaze_timeline": timeline,
         "video_url": f"/api/video/{session_id}",
+        "auto_calibration": suggestions,
     }
 
 
-@app.get("/api/video/{session_id}")
+@api.post("/auto-calibrate")
+async def get_auto_calibration(csv_path: str = Form(...)):
+    """Analyze gaze CSV and return suggested calibration parameters."""
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=400, detail="CSV not found")
+    return auto_suggest_calibration(csv_path)
+
+
+@api.post("/reprocess")
+async def reprocess_gaze(
+    csv_path: str = Form(...),
+    video_info: str = Form("{}"),
+    time_offset_ms: float = Form(0),
+    smooth_window: int = Form(2),
+    mapping_mode: str = Form("adaptive"),
+    scale_x: float = Form(1.0),
+    scale_y: float = Form(1.0),
+):
+    """Reprocess gaze with new calibration. Returns updated gaze_timeline.
+    Flip/offset are applied by frontend for display; only mapping params are reprocessed here.
+    """
+    import json
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=400, detail="CSV not found")
+    info = json.loads(video_info)
+    timeline = get_gaze_timeline(
+        csv_path,
+        video_fps=info.get("fps", 30),
+        video_width=info.get("width", 1920),
+        video_height=info.get("height", 1080),
+        video_frame_count=info.get("frame_count"),
+        time_offset_ms=float(time_offset_ms),
+        smooth_window=max(1, min(9, int(smooth_window))),
+        mapping_mode=mapping_mode if mapping_mode in ("adaptive", "fixed_eyetrackvr") else "adaptive",
+        flip_x=False,
+        flip_y=False,
+        offset_x=0,
+        offset_y=0,
+        scale_x=float(scale_x),
+        scale_y=float(scale_y),
+    )
+    return {"gaze_timeline": timeline}
+
+
+@api.get("/video/{session_id}")
 async def serve_video(session_id: str):
     """Stream uploaded video for playback."""
     matches = list(UPLOAD_DIR.glob(f"{session_id}_video*"))
@@ -82,7 +126,7 @@ async def serve_video(session_id: str):
     return FileResponse(matches[0], media_type="video/mp4")
 
 
-@app.post("/api/export")
+@api.post("/export")
 async def export_video(
     background_tasks: BackgroundTasks,
     video_path: str = Form(...),
@@ -91,6 +135,13 @@ async def export_video(
     flip_y: str = Form("false"),
     offset_x: int = Form(0),
     offset_y: int = Form(0),
+    scale_x: float = Form(1.0),
+    scale_y: float = Form(1.0),
+    time_offset_ms: float = Form(0),
+    smooth_window: int = Form(2),
+    mapping_mode: str = Form("adaptive"),
+    gaze_color: str = Form(""),
+    show_saccades: str = Form("true"),
 ):
     """Export video with gaze overlay. Returns export_id for polling progress."""
     if not os.path.exists(video_path) or not os.path.exists(csv_path):
@@ -113,6 +164,13 @@ async def export_video(
                 flip_y=flip_y.lower() == "true",
                 offset_x=int(offset_x),
                 offset_y=int(offset_y),
+                scale_x=float(scale_x),
+                scale_y=float(scale_y),
+                time_offset_ms=float(time_offset_ms),
+                smooth_window=max(1, min(9, int(smooth_window))),
+                mapping_mode=mapping_mode if mapping_mode in ("adaptive", "fixed_eyetrackvr") else "adaptive",
+                gaze_color=gaze_color or None,
+                show_saccades=show_saccades.lower() == "true",
             )
         except Exception as e:
             export_progress[export_id]["error"] = str(e)
@@ -122,7 +180,7 @@ async def export_video(
     return {"export_id": export_id, "status": "processing"}
 
 
-@app.get("/api/export/{export_id}/status")
+@api.get("/export/{export_id}/status")
 async def export_status(export_id: str):
     """Poll export progress."""
     if export_id not in export_progress:
@@ -136,7 +194,7 @@ async def export_status(export_id: str):
     return result
 
 
-@app.get("/api/download/{export_id}")
+@api.get("/download/{export_id}")
 async def download_export(export_id: str):
     """Download exported video."""
     if export_id not in export_progress:
@@ -150,7 +208,7 @@ async def download_export(export_id: str):
 save_progress = {}  # session_id -> {progress, done, error}
 
 
-@app.post("/api/sessions")
+@api.post("/sessions")
 async def create_session(
     background_tasks: BackgroundTasks,
     name: str = Form(...),
@@ -164,6 +222,13 @@ async def create_session(
     flip_y: str = Form("false"),
     offset_x: int = Form(0),
     offset_y: int = Form(0),
+    scale_x: float = Form(1.0),
+    scale_y: float = Form(1.0),
+    time_offset_ms: float = Form(0),
+    smooth_window: int = Form(2),
+    mapping_mode: str = Form("adaptive"),
+    gaze_color: str = Form(""),
+    show_saccades: str = Form("true"),
 ):
     """Save session: exports video with gaze overlay and stores it."""
     import json
@@ -192,6 +257,13 @@ async def create_session(
                 flip_y=flip_y.lower() == "true",
                 offset_x=int(offset_x),
                 offset_y=int(offset_y),
+                scale_x=float(scale_x),
+                scale_y=float(scale_y),
+                time_offset_ms=float(time_offset_ms),
+                smooth_window=max(1, min(9, int(smooth_window))),
+                mapping_mode=mapping_mode if mapping_mode in ("adaptive", "fixed_eyetrackvr") else "adaptive",
+                gaze_color=gaze_color or None,
+                show_saccades=show_saccades.lower() == "true",
             )
             save_progress[sid] = {"progress": 100, "done": True, "error": None}
             update_session_output_sync(sid, str(output_path))
@@ -202,13 +274,13 @@ async def create_session(
     return {"session_id": sid, "status": "processing", "message": "Exporting and saving..."}
 
 
-@app.get("/api/sessions")
+@api.get("/sessions")
 async def get_sessions():
     """List all saved sessions."""
     return await list_sessions()
 
 
-@app.get("/api/sessions/{session_id}/save-status")
+@api.get("/sessions/{session_id}/save-status")
 async def get_save_status(session_id: int):
     """Poll save/export progress."""
     if session_id not in save_progress:
@@ -220,7 +292,7 @@ async def get_save_status(session_id: int):
     return {"progress": d["progress"], "done": d["done"], "error": d.get("error")}
 
 
-@app.get("/api/sessions/{session_id}")
+@api.get("/sessions/{session_id}")
 async def get_session(session_id: int):
     """Load a saved session."""
     s = await load_session(session_id)
@@ -240,7 +312,7 @@ async def get_session(session_id: int):
     return s
 
 
-@app.get("/api/session-video/{session_id}")
+@api.get("/session-video/{session_id}")
 async def serve_session_video(session_id: int):
     """Serve saved session video (gaze overlay baked in)."""
     output_path = SESSIONS_DIR / str(session_id) / "output.mp4"
@@ -255,7 +327,7 @@ async def serve_session_video(session_id: int):
     raise HTTPException(status_code=404, detail="Video not found")
 
 
-@app.delete("/api/sessions/{session_id}")
+@api.delete("/sessions/{session_id}")
 async def remove_session(session_id: int):
     """Delete a session and its stored files."""
     session_dir = SESSIONS_DIR / str(session_id)
@@ -269,7 +341,17 @@ async def remove_session(session_id: int):
     return {"message": "Deleted"}
 
 
-# Serve static frontend
+# Mount API first so /api/* routes take precedence over static (fixes 405 on POST)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="EyeTrackVR Gaze Processor", lifespan=lifespan)
+app.include_router(api)
+
+# Serve static frontend last
 static_dir = Path(__file__).parent.parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

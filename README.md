@@ -33,9 +33,14 @@ Then open **http://127.0.0.1:8000** in your browser.
 - **CSV**: `timestamp_ms`, `eye_id`, `x`, `y`, (optional: `pupil_dilation`, `eye_blink`)
 - **Video**: World camera MP4; timestamps should align with gaze recording
 
-Gaze coordinates are mapped to video pixels using adaptive range fitting and smoothing.
+Gaze coordinates are mapped to video pixels. **Accuracy calibration** (below player):
+- **Auto-detect**: Analyzes gaze data and suggests time offset, mapping mode, etc. Runs automatically on process; manual adjustments remain available
+- **Use auto** (toggle): When on, uses auto-detected settings; when off, uses manual form values
+- **Time offset** (ms): Fix sync if gaze lags/leads video (+ advances gaze)
+- **Mapping**: Adaptive (fit to data) or Fixed EyeTrackVR (x∈[-1,1], y∈[0,1])
+- **Scale X/Y**: Correct FOV mismatch between world camera and display
 
 ## Purpose
 - For a research project @ University of Maryland, College Park
-- Exploring Cursor and AI assisted development tools to implement systems and feautres
+- Exploring Cursor and agentic development tools to implement systems and feautres
 - Exploring 'prompt engineering,' curious on the limits and extents to the system

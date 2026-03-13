@@ -7,12 +7,27 @@ from scipy.interpolate import interp1d
 from typing import Tuple, List, Optional
 
 
-def load_gaze_data(csv_path: str) -> pd.DataFrame:
-    """Load gaze CSV and return processed dataframe."""
+def load_gaze_data(csv_path: str, merge_eyes: bool = True) -> pd.DataFrame:
+    """Load gaze CSV and return processed dataframe.
+    If eye_id exists and merge_eyes=True, averages LEFT and RIGHT eyes per timestamp for better accuracy.
+    """
     df = pd.read_csv(csv_path)
     required = ['timestamp_ms', 'x', 'y']
     if not all(c in df.columns for c in required):
         raise ValueError(f"CSV must contain columns: {required}")
+
+    if merge_eyes and 'eye_id' in df.columns:
+        # Binocular: average both eyes per timestamp (EyeTrackVR logs LEFT/RIGHT separately)
+        numeric_cols = ['x', 'y']
+        if 'pupil_dilation' in df.columns:
+            numeric_cols.append('pupil_dilation')
+        if 'eye_blink' in df.columns:
+            numeric_cols.append('eye_blink')
+        agg_dict = {c: 'mean' for c in numeric_cols}
+        for c in df.columns:
+            if c not in numeric_cols and c != 'timestamp_ms':
+                agg_dict[c] = 'first'
+        df = df.groupby('timestamp_ms', as_index=False).agg(agg_dict)
     return df.sort_values('timestamp_ms').reset_index(drop=True)
 
 
@@ -56,6 +71,51 @@ def map_gaze_to_video(
     return (px, py)
 
 
+def auto_suggest_calibration(csv_path: str) -> dict:
+    """
+    Analyze gaze CSV and suggest calibration parameters.
+    Returns dict with time_offset_ms, mapping_mode, flip_x, flip_y, scale_x, scale_y, smooth_window,
+    plus a 'changes' list describing what was auto-detected.
+    """
+    df = load_gaze_data(csv_path)
+    changes = []
+    suggestions = {
+        "time_offset_ms": 0,
+        "mapping_mode": "adaptive",
+        "flip_x": False,
+        "flip_y": False,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "smooth_window": 2,
+        "changes": [],
+    }
+
+    t = df["timestamp_ms"].values
+    x_min, x_max = float(df["x"].min()), float(df["x"].max())
+    y_min, y_max = float(df["y"].min()), float(df["y"].max())
+
+    # Time offset: align video frame 0 with first gaze sample
+    first_ts = float(t[0])
+    if first_ts > 5:
+        suggestions["time_offset_ms"] = -round(first_ts)
+        suggestions["changes"].append(f"Time offset: {suggestions['time_offset_ms']}ms (align to first gaze sample)")
+
+    # Mapping: use adaptive if y has negative values (EyeTrackVR variants use y in [-1,1] or similar)
+    if y_min < -0.05 or y_max > 1.05:
+        suggestions["mapping_mode"] = "adaptive"
+        suggestions["changes"].append(
+            f"Mapping: adaptive (y range [{y_min:.2f}, {y_max:.2f}] — Fixed would clip)"
+        )
+    elif -0.1 <= x_min and x_max <= 1.1 and 0 <= y_min and y_max <= 1.1:
+        suggestions["mapping_mode"] = "fixed_eyetrackvr"
+        suggestions["changes"].append("Mapping: Fixed EyeTrackVR (x∈[-1,1], y∈[0,1])")
+
+    if not suggestions["changes"]:
+        suggestions["changes"].append("No automatic adjustments needed")
+
+    return suggestions
+
+
 def compute_gaze_ranges(df: pd.DataFrame) -> Tuple[Tuple[float, float], Tuple[float, float]]:
     """Compute x,y ranges from data for adaptive mapping. Uses percentiles for robustness."""
     x_min, x_max = df['x'].quantile(0.02), df['x'].quantile(0.98)
@@ -72,15 +132,19 @@ def build_gaze_interpolator(
     video_height: int,
     smooth_window: int = 2,
     time_offset_ms: float = 0,
+    mapping_mode: str = "adaptive",
 ) -> Tuple[callable, callable, float, float]:
     """
     Build interpolation functions for gaze at any timestamp.
     Returns (px_interp, py_interp, t_start_ms, t_end_ms).
-    Uses cubic interpolation for smoother motion; falls back to linear if few samples.
+    mapping_mode: "adaptive" = fit to data percentiles; "fixed_eyetrackvr" = x in [-1,1], y in [0,1].
     time_offset_ms: added to query time (positive = advance gaze when it lags).
     """
     df = smooth_gaze(df, window=smooth_window)
-    x_range, y_range = compute_gaze_ranges(df)
+    if mapping_mode == "fixed_eyetrackvr":
+        x_range, y_range = (-1.0, 1.0), (0.0, 1.0)
+    else:
+        x_range, y_range = compute_gaze_ranges(df)
 
     t = df['timestamp_ms'].values
     x = df['x_smooth'].values
@@ -110,8 +174,12 @@ def _apply_gaze_transform(
     video_width: int, video_height: int,
     flip_x: bool = False, flip_y: bool = False,
     offset_x: int = 0, offset_y: int = 0,
+    scale_x: float = 1.0, scale_y: float = 1.0,
 ) -> Tuple[int, int]:
-    """Apply flip and offset to gaze pixel coordinates."""
+    """Apply flip, scale (from center), and offset to gaze pixel coordinates."""
+    cx, cy = (video_width - 1) / 2, (video_height - 1) / 2
+    px = (px - cx) * scale_x + cx
+    py = (py - cy) * scale_y + cy
     if flip_x:
         px = video_width - 1 - px
     if flip_y:
@@ -130,10 +198,13 @@ def get_gaze_timeline(
     video_frame_count: Optional[int] = None,
     time_offset_ms: float = 0,
     smooth_window: int = 2,
+    mapping_mode: str = "adaptive",
     flip_x: bool = False,
     flip_y: bool = False,
     offset_x: int = 0,
     offset_y: int = 0,
+    scale_x: float = 1.0,
+    scale_y: float = 1.0,
 ) -> List[dict]:
     """
     Generate gaze coordinates for each video frame.
@@ -146,6 +217,7 @@ def get_gaze_timeline(
         df, video_width, video_height,
         smooth_window=smooth_window,
         time_offset_ms=time_offset_ms,
+        mapping_mode=mapping_mode,
     )
 
     ms_per_frame = 1000.0 / video_fps if video_fps > 0 else 33.33
@@ -168,6 +240,7 @@ def get_gaze_timeline(
             px, py, video_width, video_height,
             flip_x=flip_x, flip_y=flip_y,
             offset_x=offset_x, offset_y=offset_y,
+            scale_x=scale_x, scale_y=scale_y,
         )
         timeline.append({
             'frame_idx': i,

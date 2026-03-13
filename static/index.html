@@ -10,15 +10,21 @@
   <style>
     :root {
       --bg: #0d0f14;
+      --bg-subtle: #111318;
       --surface: #161a22;
       --surface-hover: #1c2129;
       --border: #2a3140;
+      --border-subtle: #21262d;
       --text: #e6edf3;
       --text-muted: #8b949e;
       --accent: #58a6ff;
-      --accent-dim: #388bfd66;
+      --accent-hover: #79b8ff;
       --success: #3fb950;
       --warning: #d29922;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --space: 1rem;
+      --space-lg: 1.5rem;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,91 +33,150 @@
       color: var(--text);
       min-height: 100vh;
       line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
     .layout {
-      max-width: 1400px;
+      max-width: 1100px;
       margin: 0 auto;
-      padding: 2rem;
+      padding: var(--space-lg) var(--space);
+      animation: layoutEnter 0.5s ease-out;
+    }
+    @keyframes layoutEnter {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     header {
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
+      margin-bottom: var(--space-lg);
+      padding-bottom: var(--space-lg);
       border-bottom: 1px solid var(--border);
     }
     h1 {
       font-size: 1.5rem;
       font-weight: 600;
       letter-spacing: -0.02em;
+      color: var(--text);
     }
     .subtitle {
       color: var(--text-muted);
       font-size: 0.9rem;
-      margin-top: 0.25rem;
+      margin-top: 0.35rem;
     }
     .upload-zone {
       background: var(--surface);
       border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 2.5rem;
+      border-radius: var(--radius);
+      padding: var(--space-lg) var(--space);
       text-align: center;
-      transition: border-color 0.2s, background 0.2s;
-      margin-bottom: 1.5rem;
+      transition: border-color 0.25s, background 0.25s, transform 0.2s ease, box-shadow 0.25s;
     }
-    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--surface-hover); }
-    .upload-zone label {
-      cursor: pointer;
+    .upload-zone:hover {
+      border-color: var(--accent);
+      background: var(--surface-hover);
+    }
+    .upload-zone.dragover {
+      border-color: var(--accent);
+      background: var(--surface-hover);
+      transform: scale(1.01);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .upload-zone .icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+      animation: iconFloat 3s ease-in-out infinite;
+    }
+    @keyframes iconFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    .upload-zone .hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .upload-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: center;
+      gap: var(--space);
+      margin-top: var(--space-lg);
+    }
+    .upload-field {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 0.75rem;
+      gap: 0.35rem;
+      min-width: 140px;
+    }
+    .upload-field label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-align: left;
+    }
+    .upload-field input[type="file"] {
+      font-size: 0.8rem;
       color: var(--text-muted);
     }
-    .upload-zone label span:first-child { font-size: 2rem; }
-    .upload-zone .hint { font-size: 0.85rem; }
-    .row {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      margin-top: 1rem;
-    }
-    .row label { min-width: 80px; font-size: 0.9rem; color: var(--text-muted); }
-    .row input[type="file"] { flex: 1; font-size: 0.85rem; color: var(--text-muted); }
     .btn {
       font-family: inherit;
       font-size: 0.9rem;
       font-weight: 500;
-      padding: 0.6rem 1.2rem;
+      padding: 0.6rem 1.25rem;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      transition: background 0.2s, opacity 0.2s;
+      transition: background 0.2s, opacity 0.2s, border-color 0.2s, transform 0.15s ease;
     }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: var(--accent); color: var(--bg); }
-    .btn-primary:hover:not(:disabled) { background: #79b8ff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
     .btn-ghost {
       background: transparent;
       color: var(--text);
       border: 1px solid var(--border);
     }
-    .btn-ghost:hover:not(:disabled) { background: var(--surface-hover); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-subtle); }
+    .btn-browse {
+      margin-top: var(--space);
+      font-size: 0.85rem;
+    }
     .player-section {
       display: none;
-      margin-top: 2rem;
+      margin-top: var(--space-lg);
     }
-    .player-section.visible { display: block; }
+    .player-section.visible {
+      display: block;
+      animation: playerSlideIn 0.4s ease-out;
+    }
+    @keyframes playerSlideIn {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .player-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: box-shadow 0.3s ease;
+    }
+    .player-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
     .video-container {
       position: relative;
       background: #000;
-      border-radius: 12px;
-      overflow: hidden;
       aspect-ratio: 16/9;
-      max-width: 100%;
     }
     .video-container video {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+    .gaze-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
     }
     .gaze-dot {
       position: absolute;
@@ -120,60 +185,183 @@
       margin-left: -12px;
       margin-top: -12px;
       border-radius: 50%;
-      background: rgba(88, 166, 255, 0.5);
+      background: var(--gaze-color, rgba(88, 166, 255, 0.5));
       border: 3px solid rgba(255,255,255,0.9);
       pointer-events: none;
-      transition: left 0.05s, top 0.05s;
+      transition: left 0.05s, top 0.05s, background 0.2s;
     }
-    .controls {
+    .saccade-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .saccade-svg line {
+      stroke: #ff4444;
+      stroke-width: 2;
+      stroke-linecap: round;
+      opacity: 0.85;
+    }
+    .player-controls {
+      padding: var(--space);
       display: flex;
       align-items: center;
-      gap: 1rem;
-      margin-top: 1rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border-radius: 10px;
+      gap: var(--space);
+      border-top: 1px solid var(--border);
     }
-    .controls button { padding: 0.5rem 1rem; }
-    .controls input[type="range"] {
+    .player-controls input[type="range"] {
       flex: 1;
+      min-width: 100px;
       accent-color: var(--accent);
       height: 6px;
     }
     .time-display {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       color: var(--text-muted);
-      min-width: 100px;
+      min-width: 90px;
+      text-align: right;
     }
-    .actions {
+    .player-actions {
+      padding: var(--space);
+      border-top: 1px solid var(--border);
       display: flex;
-      gap: 0.75rem;
-      margin-top: 1rem;
+      flex-direction: column;
+      gap: var(--space);
+    }
+    .player-actions .btn-primary { align-self: flex-start; }
+    .save-row {
+      display: flex;
       flex-wrap: wrap;
-    }
-    .save-session {
-      display: flex;
-      gap: 0.5rem;
+      gap: var(--space);
       align-items: center;
-      margin-top: 1rem;
     }
-    .save-session input {
+    .gaze-calibration {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space);
+      padding: var(--space);
+      background: var(--bg-subtle);
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .gaze-calibration .label {
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-right: 0.5rem;
+    }
+    .gaze-calibration .controls-row,
+    .gaze-calibration .accuracy-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space);
+      align-items: center;
+      flex: 1;
+    }
+    .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+    .gaze-calibration .divider {
+      color: var(--border);
+      margin: 0 0.1rem;
+      user-select: none;
+    }
+    .auto-adjustments-panel {
+      width: 100%;
+      padding: 0.35rem 0.75rem;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .auto-adjustments-panel ul { margin: 0; padding: 0 0 0 1rem; }
+    .advanced-toggle {
+      width: 100%;
+      margin-top: 0.25rem;
+    }
+    .advanced-toggle summary {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    .advanced-toggle summary:hover { color: var(--text); }
+    .gaze-calibration label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    .gaze-calibration input[type="number"] {
+      width: 64px;
+      padding: 0.35rem 0.5rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+    .save-row input[type="text"] {
       padding: 0.5rem 0.75rem;
       border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--surface);
+      border-radius: var(--radius-sm);
+      background: var(--bg);
       color: var(--text);
       font-family: inherit;
-      flex: 1;
-      max-width: 240px;
+      font-size: 0.9rem;
+      width: 200px;
     }
+    .save-row input[type="text"]::placeholder { color: var(--text-muted); opacity: 0.7; }
+    .progress-wrap {
+      margin-top: var(--space);
+      display: none;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+      transition: width 0.3s ease-out;
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-bar .fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,0.2),
+        transparent
+      );
+      animation: progressShimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes progressShimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .progress-wrap .hint { font-size: 0.75rem; margin-top: 0.35rem; color: var(--text-muted); }
     .sessions-panel {
-      margin-top: 2rem;
-      padding-top: 1.5rem;
+      margin-top: var(--space-lg);
+      padding-top: var(--space-lg);
       border-top: 1px solid var(--border);
     }
-    .sessions-panel h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+    .sessions-panel h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: var(--space);
+      color: var(--text);
+    }
     .session-list {
       display: flex;
       flex-direction: column;
@@ -183,55 +371,60 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.75rem 1rem;
+      padding: 0.75rem var(--space);
       background: var(--surface);
-      border-radius: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       font-size: 0.9rem;
+      transition: transform 0.2s ease, border-color 0.2s, background 0.2s;
+    }
+    .session-item:hover {
+      border-color: var(--border-subtle);
+      background: var(--surface-hover);
+    }
+    .session-item.animate-in {
+      opacity: 0;
+      animation: sessionFadeIn 0.35s ease-out forwards;
+    }
+    @keyframes sessionFadeIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
     }
     .session-item .name { font-weight: 500; }
-    .session-item .meta { color: var(--text-muted); font-size: 0.8rem; }
-    .session-item button { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
-    .progress-bar {
-      height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
-      margin-top: 0.5rem;
-    }
-    .progress-bar .fill {
-      height: 100%;
-      background: var(--accent);
-      transition: width 0.2s;
-    }
+    .session-item .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.15rem; }
+    .session-item .actions { display: flex; gap: 0.5rem; }
     .toast {
       position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
+      bottom: var(--space-lg);
+      right: var(--space-lg);
       padding: 0.75rem 1.25rem;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       font-size: 0.9rem;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       z-index: 100;
-      animation: fadeIn 0.2s;
+      animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .toast.success { border-color: var(--success); }
     .toast.error { border-color: #f85149; }
-    .gaze-calibration {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.75rem;
-      margin-top: 0.75rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border-radius: 8px;
-      font-size: 0.9rem;
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
-    .gaze-calibration label { display: flex; align-items: center; gap: 0.35rem; }
-    .gaze-calibration input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 640px) {
+      .layout { padding: var(--space); }
+      .upload-row { flex-direction: column; align-items: stretch; }
+      .upload-field { min-width: auto; }
+      .save-row input[type="text"] { width: 100%; max-width: 200px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .layout { animation: none; }
+      .upload-zone .icon { animation: none; }
+      .session-item.animate-in { animation: none; opacity: 1; }
+      .player-section.visible { animation: none; }
+      .progress-bar .fill::after { animation: none; display: none; }
+    }
   </style>
 </head>
 <body>
@@ -242,63 +435,84 @@
     </header>
 
     <div class="upload-zone" id="uploadZone">
-      <p style="margin-bottom: 0.5rem;">
-        <span>📂</span><br>
-        <span>Drop video + CSV here, or use the file pickers below</span>
-      </p>
-      <span class="hint">Video: .mp4 | Gaze: .csv (timestamp_ms, x, y)</span>
+      <div class="icon">📂</div>
+      <p>Drop video + CSV here, or use the file pickers below</p>
+      <p class="hint">Video: .mp4 | Gaze: .csv (timestamp_ms, x, y)</p>
       <input type="file" id="fileInput" accept=".mp4,.csv" multiple style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
-      <div class="row" style="margin-top: 1rem; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
-        <div style="display:flex;flex-direction:column;gap:0.25rem;">
+      <div class="upload-row">
+        <div class="upload-field">
           <label for="videoInput">Video (.mp4)</label>
           <input type="file" id="videoInput" accept=".mp4">
         </div>
-        <div style="display:flex;flex-direction:column;gap:0.25rem;">
+        <div class="upload-field">
           <label for="csvInput">CSV (.csv)</label>
           <input type="file" id="csvInput" accept=".csv">
         </div>
-        <div style="display:flex;align-items:flex-end;">
-          <button class="btn btn-primary" id="uploadBtn" disabled>Process</button>
-        </div>
+        <button class="btn btn-primary" id="uploadBtn" disabled>Process</button>
       </div>
-      <button class="btn btn-ghost" id="browseBothBtn" style="margin-top: 0.75rem;">Or click to browse both at once</button>
+      <button class="btn btn-ghost btn-browse" id="browseBothBtn">Or browse both at once</button>
     </div>
 
     <div class="player-section" id="playerSection">
-      <div class="video-container" id="videoContainer">
-        <video id="video" playsinline></video>
-        <div class="gaze-dot" id="gazeDot"></div>
-      </div>
-      <div class="controls">
-        <button class="btn btn-ghost" id="playPause">▶ Play</button>
-        <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
-        <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
-      </div>
-      <div class="gaze-calibration" id="gazeCalibration">
-        <span class="hint" style="margin-right:0.5rem;">Gaze calibration:</span>
-        <label><input type="checkbox" id="flipX"> Flip X</label>
-        <label><input type="checkbox" id="flipY"> Flip Y</label>
-        <label>Offset X <input type="number" id="offsetX" value="0" min="-500" max="500" step="5" style="width:60px;padding:0.25rem;"></label>
-        <label>Offset Y <input type="number" id="offsetY" value="0" min="-500" max="500" step="5" style="width:60px;padding:0.25rem;"></label>
-        <span class="hint" style="font-size:0.75rem;">(px; world camera - left: offset X +20 to +60 (Might need slight adjustments otherwise)</span>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary" id="exportBtn">📥 Export video with gaze overlay</button>
-        <div class="save-session">
-          <input type="text" id="sessionName" placeholder="Session name">
-          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-muted);">
-            <input type="checkbox" id="compactSave" title="75% resolution, ~50% smaller files">
-            Compact (smaller file)
-          </label>
-          <button class="btn btn-ghost" id="saveSessionBtn">Save session</button>
+      <div class="player-card">
+        <div class="video-container" id="videoContainer">
+          <video id="video" playsinline></video>
+          <div class="gaze-overlay">
+            <svg class="saccade-svg" id="saccadeSvg"></svg>
+            <div class="gaze-dot" id="gazeDot"></div>
+          </div>
         </div>
-      </div>
-      <div id="exportProgress" style="display:none; margin-top:0.75rem;">
-        <div class="progress-bar"><div class="fill" id="progressFill" style="width:0%"></div></div>
-      </div>
-      <div id="saveProgress" style="display:none; margin-top:0.75rem;">
-        <div class="progress-bar"><div class="fill" id="saveProgressFill" style="width:0%"></div></div>
-        <span class="hint" style="margin-top:0.25rem;">Exporting & saving...</span>
+        <div class="player-controls">
+          <button class="btn btn-ghost" id="playPause">▶ Play</button>
+          <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
+          <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+        </div>
+        <div class="gaze-calibration" id="gazeCalibration">
+          <div class="controls-row">
+            <button class="btn btn-ghost btn-sm" id="autoDetectBtn">Auto-detect</button>
+            <label><input type="checkbox" id="useAutoToggle"> Use auto</label>
+            <span class="divider">|</span>
+            <label><input type="checkbox" id="flipX"> Flip X</label>
+            <label><input type="checkbox" id="flipY"> Flip Y</label>
+            <label>Offset X <input type="number" id="offsetX" value="0" min="-500" max="500" step="5"></label>
+            <label>Offset Y <input type="number" id="offsetY" value="0" min="-500" max="500" step="5"></label>
+            <label>Gaze <input type="color" id="gazeColor" value="#00ccff" title="Gaze dot color"></label>
+            <label><input type="checkbox" id="showSaccades" checked> Saccades</label>
+          </div>
+          <div class="auto-adjustments-panel" id="autoAdjustmentsPanel" style="display:none;">
+            <ul id="autoAdjustmentsList"></ul>
+          </div>
+          <details class="advanced-toggle">
+            <summary>Advanced accuracy</summary>
+            <div class="controls-row" style="margin-top:0.5rem;">
+              <label>Time offset <input type="number" id="timeOffset" value="0" min="-500" max="500" step="10"> ms</label>
+              <label>Smooth <select id="smoothWindow"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+              <label>Mapping <select id="mappingMode"><option value="adaptive">Adaptive</option><option value="fixed_eyetrackvr">Fixed (EyeTrackVR)</option></select></label>
+              <label>Scale X <input type="number" id="scaleX" value="1" min="0.5" max="1.5" step="0.05"></label>
+              <label>Scale Y <input type="number" id="scaleY" value="1" min="0.5" max="1.5" step="0.05"></label>
+              <button class="btn btn-ghost btn-sm" id="applyAccuracyBtn">Apply</button>
+            </div>
+          </details>
+        </div>
+        <div class="player-actions">
+          <button class="btn btn-primary" id="exportBtn">📥 Export video</button>
+          <div class="save-row">
+            <input type="text" id="sessionName" placeholder="Session name">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" id="compactSave" title="75% resolution, ~50% smaller">
+              Compact
+            </label>
+            <button class="btn btn-ghost" id="saveSessionBtn">Save session</button>
+          </div>
+        </div>
+        <div class="progress-wrap" id="exportProgress">
+          <div class="progress-bar"><div class="fill" id="progressFill" style="width:0%"></div></div>
+          <span class="hint">Exporting...</span>
+        </div>
+        <div class="progress-wrap" id="saveProgress">
+          <div class="progress-bar"><div class="fill" id="saveProgressFill" style="width:0%"></div></div>
+          <span class="hint">Saving session...</span>
+        </div>
       </div>
     </div>
 
@@ -339,8 +553,42 @@
     const flipY = document.getElementById('flipY');
     const offsetXInput = document.getElementById('offsetX');
     const offsetYInput = document.getElementById('offsetY');
+    const gazeColorInput = document.getElementById('gazeColor');
+    const showSaccadesInput = document.getElementById('showSaccades');
+    const saccadeSvg = document.getElementById('saccadeSvg');
+    const timeOffsetInput = document.getElementById('timeOffset');
+    const smoothWindowSelect = document.getElementById('smoothWindow');
+    const mappingModeSelect = document.getElementById('mappingMode');
+    const scaleXInput = document.getElementById('scaleX');
+    const scaleYInput = document.getElementById('scaleY');
+    const applyAccuracyBtn = document.getElementById('applyAccuracyBtn');
+    const autoDetectBtn = document.getElementById('autoDetectBtn');
+    const useAutoToggle = document.getElementById('useAutoToggle');
+    const autoAdjustmentsPanel = document.getElementById('autoAdjustmentsPanel');
+    const autoAdjustmentsList = document.getElementById('autoAdjustmentsList');
 
+    let autoSuggestions = null;
     let isLoadedSession = false;
+    const SACCADE_VELOCITY_THRESHOLD = 35;
+    const SACCADE_PERSIST_FRAMES = 6;
+
+    function getActiveCalibration() {
+      const useAuto = useAutoToggle.checked && autoSuggestions;
+      if (useAuto) {
+        return {
+          flipX: flipX.checked,
+          flipY: flipY.checked,
+          offsetX: parseInt(offsetXInput.value) || 0,
+          offsetY: parseInt(offsetYInput.value) || 0,
+          scaleX: autoSuggestions.scale_x,
+          scaleY: autoSuggestions.scale_y,
+          timeOffsetMs: autoSuggestions.time_offset_ms,
+          smoothWindow: autoSuggestions.smooth_window,
+          mappingMode: autoSuggestions.mapping_mode,
+        };
+      }
+      return getGazeTransform();
+    }
 
     function getGazeTransform() {
       return {
@@ -348,6 +596,11 @@
         flipY: flipY.checked,
         offsetX: parseInt(offsetXInput.value) || 0,
         offsetY: parseInt(offsetYInput.value) || 0,
+        scaleX: parseFloat(scaleXInput.value) || 1,
+        scaleY: parseFloat(scaleYInput.value) || 1,
+        timeOffsetMs: parseFloat(timeOffsetInput.value) || 0,
+        smoothWindow: parseInt(smoothWindowSelect.value) || 2,
+        mappingMode: mappingModeSelect.value || 'adaptive',
       };
     }
 
@@ -356,6 +609,21 @@
       if (t.flipX) px = vw - 1 - px;
       if (t.flipY) py = vh - 1 - py;
       return [px + t.offsetX, py + t.offsetY];
+    }
+
+    function computeSaccades(timeline, vw, vh) {
+      const segments = [];
+      for (let i = 1; i < timeline.length; i++) {
+        const a = timeline[i - 1];
+        const b = timeline[i];
+        let [x1, y1] = applyGazeTransform(a.x, a.y, vw, vh);
+        let [x2, y2] = applyGazeTransform(b.x, b.y, vw, vh);
+        const vel = Math.hypot(x2 - x1, y2 - y1);
+        if (vel >= SACCADE_VELOCITY_THRESHOLD) {
+          segments.push({ x1, y1, x2, y2, endFrame: i });
+        }
+      }
+      return segments;
     }
 
     function setFileInput(inputEl, file) {
@@ -432,9 +700,19 @@
         sessionData = await r.json();
         gazeTimeline = sessionData.gaze_timeline || [];
         isLoadedSession = false;
+        const sug = sessionData.auto_calibration;
+        if (sug && sug.changes && sug.changes.length > 0 && sug.changes[0] !== 'No automatic adjustments needed') {
+          autoSuggestions = sug;
+          autoAdjustmentsList.innerHTML = sug.changes.map(c => `<li>${c}</li>`).join('');
+          autoAdjustmentsPanel.style.display = 'block';
+          useAutoToggle.checked = true;
+        } else {
+          autoSuggestions = null;
+          useAutoToggle.checked = false;
+          autoAdjustmentsPanel.style.display = 'none';
+        }
         video.src = API + sessionData.video_url;
         setupPlayer();
-        toast('Ready. Gaze overlay is synced to video.');
       } catch (e) {
         toast(e.message, 'error');
       }
@@ -444,7 +722,11 @@
     uploadBtn.addEventListener('click', processUpload);
 
     function syncGaze() {
-      if (isLoadedSession || !gazeTimeline.length || !video.duration || !video.videoWidth) return;
+      if (isLoadedSession) {
+        saccadeSvg.innerHTML = '';
+        return;
+      }
+      if (!gazeTimeline.length || !video.duration || !video.videoWidth) return;
       const fps = sessionData?.video_info?.fps || 30;
       const frameIdx = Math.floor(video.currentTime * fps);
       const g = gazeTimeline[Math.min(frameIdx, gazeTimeline.length - 1)];
@@ -462,14 +744,97 @@
       const displayH = vh * scale;
       const offX = (cw - displayW) / 2;
       const offY = (ch - displayH) / 2;
+
+      container.style.setProperty('--gaze-color', gazeColorInput.value);
       gazeDot.style.left = (offX + px * scale) + 'px';
       gazeDot.style.top = (offY + py * scale) + 'px';
       gazeDot.style.display = 'block';
+
+      saccadeSvg.innerHTML = '';
+      if (showSaccadesInput.checked) {
+        const segments = computeSaccades(gazeTimeline, vw, vh);
+        const recent = segments.filter(s => s.endFrame >= frameIdx - SACCADE_PERSIST_FRAMES && s.endFrame <= frameIdx + 2);
+        const svgW = cw;
+        const svgH = ch;
+        recent.forEach(s => {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', offX + s.x1 * scale);
+          line.setAttribute('y1', offY + s.y1 * scale);
+          line.setAttribute('x2', offX + s.x2 * scale);
+          line.setAttribute('y2', offY + s.y2 * scale);
+          saccadeSvg.appendChild(line);
+        });
+      }
     }
 
-    [flipX, flipY, offsetXInput, offsetYInput].forEach(el => {
+    [flipX, flipY, offsetXInput, offsetYInput, gazeColorInput, showSaccadesInput].forEach(el => {
       el?.addEventListener('change', syncGaze);
       el?.addEventListener('input', syncGaze);
+    });
+
+    async function applyAccuracy() {
+      if (isLoadedSession || !sessionData?.csv_path || !sessionData?.video_info) {
+        toast('Process a video first', 'error');
+        return;
+      }
+      applyAccuracyBtn.disabled = true;
+      applyAccuracyBtn.textContent = 'Applying...';
+      try {
+        const fd = new FormData();
+        fd.append('csv_path', sessionData.csv_path);
+        fd.append('video_info', JSON.stringify(sessionData.video_info));
+        const t = getActiveCalibration();
+        fd.append('time_offset_ms', String(t.timeOffsetMs));
+        fd.append('smooth_window', String(t.smoothWindow));
+        fd.append('mapping_mode', t.mappingMode);
+        fd.append('scale_x', String(t.scaleX));
+        fd.append('scale_y', String(t.scaleY));
+        const r = await fetch(API + '/api/reprocess', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const { gaze_timeline } = await r.json();
+        gazeTimeline = gaze_timeline;
+        syncGaze();
+        toast('Accuracy settings applied');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+      applyAccuracyBtn.disabled = false;
+      applyAccuracyBtn.textContent = 'Apply';
+    }
+    applyAccuracyBtn.addEventListener('click', applyAccuracy);
+
+    async function runAutoDetect() {
+      if (isLoadedSession || !sessionData?.csv_path) {
+        toast('Process a video first', 'error');
+        return;
+      }
+      autoDetectBtn.disabled = true;
+      autoDetectBtn.textContent = 'Detecting...';
+      try {
+        const fd = new FormData();
+        fd.append('csv_path', sessionData.csv_path);
+        const r = await fetch(API + '/api/auto-calibrate', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        autoSuggestions = await r.json();
+        autoAdjustmentsList.innerHTML = autoSuggestions.changes.map(c => `<li>${c}</li>`).join('');
+        autoAdjustmentsPanel.style.display = 'block';
+        useAutoToggle.checked = true;
+        await applyAccuracy();
+        toast('Auto adjustments applied');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+      autoDetectBtn.disabled = false;
+      autoDetectBtn.textContent = 'Auto-detect';
+    }
+    autoDetectBtn.addEventListener('click', runAutoDetect);
+
+    useAutoToggle.addEventListener('change', () => {
+      if (autoSuggestions) {
+        applyAccuracy();
+      } else {
+        syncGaze();
+      }
     });
 
     function updateTimeDisplay() {
@@ -495,10 +860,10 @@
         return;
       }
       exportBtn.disabled = true;
-      exportProgress.style.display = 'block';
+      exportProgress.classList.add('visible');
       progressFill.style.width = '0%';
       try {
-        const t = getGazeTransform();
+        const t = getActiveCalibration();
         const fd = new FormData();
         fd.append('video_path', sessionData.video_path);
         fd.append('csv_path', sessionData.csv_path);
@@ -506,6 +871,13 @@
         fd.append('flip_y', t.flipY ? 'true' : 'false');
         fd.append('offset_x', String(t.offsetX));
         fd.append('offset_y', String(t.offsetY));
+        fd.append('scale_x', String(t.scaleX));
+        fd.append('scale_y', String(t.scaleY));
+        fd.append('time_offset_ms', String(t.timeOffsetMs));
+        fd.append('smooth_window', String(t.smoothWindow));
+        fd.append('mapping_mode', t.mappingMode);
+        fd.append('gaze_color', gazeColorInput.value || '');
+        fd.append('show_saccades', showSaccadesInput.checked ? 'true' : 'false');
         const r = await fetch(API + '/api/export', { method: 'POST', body: fd });
         const { export_id } = await r.json();
         const interval = setInterval(async () => {
@@ -514,6 +886,7 @@
           if (s.done) {
             clearInterval(interval);
             exportBtn.disabled = false;
+            exportProgress.classList.remove('visible');
             if (s.error) { toast(s.error, 'error'); return; }
             window.open(API + s.download_url, '_blank');
             toast('Export complete. Download started.');
@@ -522,6 +895,7 @@
       } catch (e) {
         toast(e.message, 'error');
         exportBtn.disabled = false;
+        exportProgress.classList.remove('visible');
       }
     }
     exportBtn.addEventListener('click', exportVideo);
@@ -537,13 +911,20 @@
       fd.append('gaze_timeline', JSON.stringify(gazeTimeline));
       fd.append('session_upload_id', sessionData.session_id || '');
       fd.append('compact', compactSave.checked ? 'true' : 'false');
-      const t = getGazeTransform();
+      const t = getActiveCalibration();
       fd.append('flip_x', t.flipX ? 'true' : 'false');
       fd.append('flip_y', t.flipY ? 'true' : 'false');
       fd.append('offset_x', String(t.offsetX));
       fd.append('offset_y', String(t.offsetY));
+      fd.append('scale_x', String(t.scaleX));
+      fd.append('scale_y', String(t.scaleY));
+      fd.append('time_offset_ms', String(t.timeOffsetMs));
+      fd.append('smooth_window', String(t.smoothWindow));
+      fd.append('mapping_mode', t.mappingMode);
+      fd.append('gaze_color', gazeColorInput.value || '');
+      fd.append('show_saccades', showSaccadesInput.checked ? 'true' : 'false');
       saveSessionBtn.disabled = true;
-      saveProgress.style.display = 'block';
+      saveProgress.classList.add('visible');
       saveProgressFill.style.width = '0%';
       try {
         const r = await fetch(API + '/api/sessions', { method: 'POST', body: fd });
@@ -556,7 +937,7 @@
           if (st.done) {
             clearInterval(poll);
             saveSessionBtn.disabled = false;
-            saveProgress.style.display = 'none';
+            saveProgress.classList.remove('visible');
             if (st.error) { toast(st.error, 'error'); return; }
             toast('Session saved');
             loadSessions();
@@ -565,22 +946,23 @@
       } catch (e) {
         toast(e.message, 'error');
         saveSessionBtn.disabled = false;
-        saveProgress.style.display = 'none';
+        saveProgress.classList.remove('visible');
       }
     }
     saveSessionBtn.addEventListener('click', saveSession);
 
     async function loadSessions() {
       const list = await fetch(API + '/api/sessions').then(r=>r.json());
-      sessionList.innerHTML = list.map(s => {
+      sessionList.innerHTML = list.map((s, i) => {
         const processing = s.status === 'processing';
+        const delay = i * 50;
         return `
-        <div class="session-item">
+        <div class="session-item animate-in" style="animation-delay: ${delay}ms">
           <div>
             <div class="name">${s.name}</div>
             <div class="meta">${s.created_at}${processing ? ' (exporting...)' : ''}</div>
           </div>
-          <div>
+          <div class="actions">
             <button class="btn btn-ghost" onclick="loadSession(${s.id})" ${processing ? 'disabled' : ''}>Load</button>
             <button class="btn btn-ghost" onclick="deleteSession(${s.id})">Delete</button>
           </div>
@@ -601,6 +983,9 @@
       sessionData = { video_path: s.video_path, csv_path: s.csv_path, video_info: s.video_info, session_db_id: id };
       gazeTimeline = [];
       isLoadedSession = true;
+      autoSuggestions = null;
+      useAutoToggle.checked = false;
+      autoAdjustmentsPanel.style.display = 'none';
       video.src = API + s.video_url;
       setupPlayer();
       toast('Session loaded.');
