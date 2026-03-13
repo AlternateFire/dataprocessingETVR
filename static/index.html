@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EyeTrackVR Gaze Processor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a22;
+      --surface-hover: #1c2129;
+      --border: #2a3140;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-dim: #388bfd66;
+      --success: #3fb950;
+      --warning: #d29922;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .layout {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+    .upload-zone {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 1.5rem;
+    }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--surface-hover); }
+    .upload-zone label {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      color: var(--text-muted);
+    }
+    .upload-zone label span:first-child { font-size: 2rem; }
+    .upload-zone .hint { font-size: 0.85rem; }
+    .row {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+    .row label { min-width: 80px; font-size: 0.9rem; color: var(--text-muted); }
+    .row input[type="file"] { flex: 1; font-size: 0.85rem; color: var(--text-muted); }
+    .btn {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-primary:hover:not(:disabled) { background: #79b8ff; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface-hover); }
+    .player-section {
+      display: none;
+      margin-top: 2rem;
+    }
+    .player-section.visible { display: block; }
+    .video-container {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+      max-width: 100%;
+    }
+    .video-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .gaze-dot {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      margin-left: -12px;
+      margin-top: -12px;
+      border-radius: 50%;
+      background: rgba(88, 166, 255, 0.5);
+      border: 3px solid rgba(255,255,255,0.9);
+      pointer-events: none;
+      transition: left 0.05s, top 0.05s;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: 10px;
+    }
+    .controls button { padding: 0.5rem 1rem; }
+    .controls input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 6px;
+    }
+    .time-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-width: 100px;
+    }
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .save-session {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+    .save-session input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      flex: 1;
+      max-width: 240px;
+    }
+    .sessions-panel {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .sessions-panel h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+    .session-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .session-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .session-item .name { font-weight: 500; }
+    .session-item .meta { color: var(--text-muted); font-size: 0.8rem; }
+    .session-item button { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.2s;
+    }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      z-index: 100;
+      animation: fadeIn 0.2s;
+    }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: #f85149; }
+    .gaze-calibration {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .gaze-calibration label { display: flex; align-items: center; gap: 0.35rem; }
+    .gaze-calibration input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header>
+      <h1>EyeTrackVR Gaze Processor</h1>
+      <p class="subtitle">Upload world camera video + gaze CSV to visualize and export gaze-overlay footage</p>
+    </header>
+
+    <div class="upload-zone" id="uploadZone">
+      <p style="margin-bottom: 0.5rem;">
+        <span>📂</span><br>
+        <span>Drop video + CSV here, or use the file pickers below</span>
+      </p>
+      <span class="hint">Video: .mp4 | Gaze: .csv (timestamp_ms, x, y)</span>
+      <input type="file" id="fileInput" accept=".mp4,.csv" multiple style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
+      <div class="row" style="margin-top: 1rem; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
+        <div style="display:flex;flex-direction:column;gap:0.25rem;">
+          <label for="videoInput">Video (.mp4)</label>
+          <input type="file" id="videoInput" accept=".mp4">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;">
+          <label for="csvInput">CSV (.csv)</label>
+          <input type="file" id="csvInput" accept=".csv">
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn btn-primary" id="uploadBtn" disabled>Process</button>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="browseBothBtn" style="margin-top: 0.75rem;">Or click to browse both at once</button>
+    </div>
+
+    <div class="player-section" id="playerSection">
+      <div class="video-container" id="videoContainer">
+        <video id="video" playsinline></video>
+        <div class="gaze-dot" id="gazeDot"></div>
+      </div>
+      <div class="controls">
+        <button class="btn btn-ghost" id="playPause">▶ Play</button>
+        <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
+        <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+      </div>
+      <div class="gaze-calibration" id="gazeCalibration">
+        <span class="hint" style="margin-right:0.5rem;">Gaze calibration:</span>
+        <label><input type="checkbox" id="flipX"> Flip X</label>
+        <label><input type="checkbox" id="flipY"> Flip Y</label>
+        <label>Offset X <input type="number" id="offsetX" value="0" min="-500" max="500" step="5" style="width:60px;padding:0.25rem;"></label>
+        <label>Offset Y <input type="number" id="offsetY" value="0" min="-500" max="500" step="5" style="width:60px;padding:0.25rem;"></label>
+        <span class="hint" style="font-size:0.75rem;">(px; world camera - left: offset X +20 to +60 (Might need slight adjustments otherwise)</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="exportBtn">📥 Export video with gaze overlay</button>
+        <div class="save-session">
+          <input type="text" id="sessionName" placeholder="Session name">
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-muted);">
+            <input type="checkbox" id="compactSave" title="75% resolution, ~50% smaller files">
+            Compact (smaller file)
+          </label>
+          <button class="btn btn-ghost" id="saveSessionBtn">Save session</button>
+        </div>
+      </div>
+      <div id="exportProgress" style="display:none; margin-top:0.75rem;">
+        <div class="progress-bar"><div class="fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+      <div id="saveProgress" style="display:none; margin-top:0.75rem;">
+        <div class="progress-bar"><div class="fill" id="saveProgressFill" style="width:0%"></div></div>
+        <span class="hint" style="margin-top:0.25rem;">Exporting & saving...</span>
+      </div>
+    </div>
+
+    <div class="sessions-panel" id="sessionsPanel">
+      <h2>Saved sessions</h2>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    let sessionData = null;
+    let gazeTimeline = [];
+    let currentFrameIdx = 0;
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const videoInput = document.getElementById('videoInput');
+    const csvInput = document.getElementById('csvInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const browseBothBtn = document.getElementById('browseBothBtn');
+    const playerSection = document.getElementById('playerSection');
+    const video = document.getElementById('video');
+    const gazeDot = document.getElementById('gazeDot');
+    const playPause = document.getElementById('playPause');
+    const seekBar = document.getElementById('seekBar');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const exportBtn = document.getElementById('exportBtn');
+    const sessionName = document.getElementById('sessionName');
+    const saveSessionBtn = document.getElementById('saveSessionBtn');
+    const exportProgress = document.getElementById('exportProgress');
+    const progressFill = document.getElementById('progressFill');
+    const saveProgress = document.getElementById('saveProgress');
+    const saveProgressFill = document.getElementById('saveProgressFill');
+    const compactSave = document.getElementById('compactSave');
+    const sessionList = document.getElementById('sessionList');
+    const flipX = document.getElementById('flipX');
+    const flipY = document.getElementById('flipY');
+    const offsetXInput = document.getElementById('offsetX');
+    const offsetYInput = document.getElementById('offsetY');
+
+    let isLoadedSession = false;
+
+    function getGazeTransform() {
+      return {
+        flipX: flipX.checked,
+        flipY: flipY.checked,
+        offsetX: parseInt(offsetXInput.value) || 0,
+        offsetY: parseInt(offsetYInput.value) || 0,
+      };
+    }
+
+    function applyGazeTransform(px, py, vw, vh) {
+      const t = getGazeTransform();
+      if (t.flipX) px = vw - 1 - px;
+      if (t.flipY) py = vh - 1 - py;
+      return [px + t.offsetX, py + t.offsetY];
+    }
+
+    function setFileInput(inputEl, file) {
+      const dt = new DataTransfer();
+      if (file) dt.items.add(file);
+      inputEl.files = dt.files;
+    }
+
+    function enableUpload() {
+      uploadBtn.disabled = !(videoInput.files.length && csvInput.files.length);
+    }
+    videoInput.addEventListener('change', enableUpload);
+    csvInput.addEventListener('change', enableUpload);
+
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files);
+      const mp4 = files.find(f => f.name.toLowerCase().endsWith('.mp4'));
+      const csv = files.find(f => f.name.toLowerCase().endsWith('.csv'));
+      if (mp4) setFileInput(videoInput, mp4);
+      if (csv) setFileInput(csvInput, csv);
+      enableUpload();
+    });
+
+    browseBothBtn.addEventListener('click', () => fileInput.click());
+
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const files = Array.from(e.dataTransfer.files);
+      const mp4 = files.find(f => f.name.toLowerCase().endsWith('.mp4'));
+      const csv = files.find(f => f.name.toLowerCase().endsWith('.csv'));
+      if (mp4) setFileInput(videoInput, mp4);
+      if (csv) setFileInput(csvInput, csv);
+      enableUpload();
+    });
+
+    let seekBarInputHandler = null;
+
+    function setupPlayer() {
+      gazeDot.style.display = isLoadedSession ? 'none' : 'block';
+      video.onloadedmetadata = () => {
+        seekBar.max = video.duration;
+        seekBar.value = 0;
+        updateTimeDisplay();
+        syncGaze();
+      };
+      video.onplay = () => { playPause.textContent = '⏸ Pause'; };
+      video.onpause = () => { playPause.textContent = '▶ Play'; };
+      video.ontimeupdate = syncGaze;
+      video.onerror = () => toast('Video failed to load', 'error');
+      if (seekBarInputHandler) seekBar.removeEventListener('input', seekBarInputHandler);
+      seekBarInputHandler = () => {
+        video.currentTime = seekBar.value;
+        syncGaze();
+      };
+      seekBar.addEventListener('input', seekBarInputHandler);
+      playerSection.classList.add('visible');
+    }
+
+    window.addEventListener('resize', () => syncGaze());
+
+    async function processUpload() {
+      if (!videoInput.files[0] || !csvInput.files[0]) return;
+      const fd = new FormData();
+      fd.append('video', videoInput.files[0]);
+      fd.append('csv', csvInput.files[0]);
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Processing...';
+      try {
+        const r = await fetch(API + '/api/upload', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        sessionData = await r.json();
+        gazeTimeline = sessionData.gaze_timeline || [];
+        isLoadedSession = false;
+        video.src = API + sessionData.video_url;
+        setupPlayer();
+        toast('Ready. Gaze overlay is synced to video.');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Process';
+    }
+    uploadBtn.addEventListener('click', processUpload);
+
+    function syncGaze() {
+      if (isLoadedSession || !gazeTimeline.length || !video.duration || !video.videoWidth) return;
+      const fps = sessionData?.video_info?.fps || 30;
+      const frameIdx = Math.floor(video.currentTime * fps);
+      const g = gazeTimeline[Math.min(frameIdx, gazeTimeline.length - 1)];
+      if (!g) return;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      let [px, py] = applyGazeTransform(g.x, g.y, vw, vh);
+      px = Math.max(0, Math.min(vw - 1, px));
+      py = Math.max(0, Math.min(vh - 1, py));
+      const container = document.getElementById('videoContainer');
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const scale = Math.min(cw / vw, ch / vh);
+      const displayW = vw * scale;
+      const displayH = vh * scale;
+      const offX = (cw - displayW) / 2;
+      const offY = (ch - displayH) / 2;
+      gazeDot.style.left = (offX + px * scale) + 'px';
+      gazeDot.style.top = (offY + py * scale) + 'px';
+      gazeDot.style.display = 'block';
+    }
+
+    [flipX, flipY, offsetXInput, offsetYInput].forEach(el => {
+      el?.addEventListener('change', syncGaze);
+      el?.addEventListener('input', syncGaze);
+    });
+
+    function updateTimeDisplay() {
+      const c = video.currentTime || 0;
+      const d = video.duration || 0;
+      timeDisplay.textContent = `${fmt(c)} / ${fmt(d)}`;
+    }
+    function fmt(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return `${m}:${sec.toString().padStart(2,'0')}`;
+    }
+
+    playPause.addEventListener('click', () => {
+      if (video.paused) video.play();
+      else video.pause();
+    });
+    video.addEventListener('timeupdate', () => { seekBar.value = video.currentTime; updateTimeDisplay(); });
+
+    async function exportVideo() {
+      if (!sessionData?.video_path && !sessionData?.csv_path) {
+        toast('Upload and process first', 'error');
+        return;
+      }
+      exportBtn.disabled = true;
+      exportProgress.style.display = 'block';
+      progressFill.style.width = '0%';
+      try {
+        const t = getGazeTransform();
+        const fd = new FormData();
+        fd.append('video_path', sessionData.video_path);
+        fd.append('csv_path', sessionData.csv_path);
+        fd.append('flip_x', t.flipX ? 'true' : 'false');
+        fd.append('flip_y', t.flipY ? 'true' : 'false');
+        fd.append('offset_x', String(t.offsetX));
+        fd.append('offset_y', String(t.offsetY));
+        const r = await fetch(API + '/api/export', { method: 'POST', body: fd });
+        const { export_id } = await r.json();
+        const interval = setInterval(async () => {
+          const s = await fetch(API + `/api/export/${export_id}/status`).then(r=>r.json());
+          progressFill.style.width = s.progress + '%';
+          if (s.done) {
+            clearInterval(interval);
+            exportBtn.disabled = false;
+            if (s.error) { toast(s.error, 'error'); return; }
+            window.open(API + s.download_url, '_blank');
+            toast('Export complete. Download started.');
+          }
+        }, 300);
+      } catch (e) {
+        toast(e.message, 'error');
+        exportBtn.disabled = false;
+      }
+    }
+    exportBtn.addEventListener('click', exportVideo);
+
+    async function saveSession() {
+      const name = sessionName.value.trim() || `Session ${new Date().toLocaleString()}`;
+      if (!sessionData) { toast('Process a video first', 'error'); return; }
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('video_path', sessionData.video_path || '');
+      fd.append('csv_path', sessionData.csv_path || '');
+      fd.append('video_info', JSON.stringify(sessionData.video_info || {}));
+      fd.append('gaze_timeline', JSON.stringify(gazeTimeline));
+      fd.append('session_upload_id', sessionData.session_id || '');
+      fd.append('compact', compactSave.checked ? 'true' : 'false');
+      const t = getGazeTransform();
+      fd.append('flip_x', t.flipX ? 'true' : 'false');
+      fd.append('flip_y', t.flipY ? 'true' : 'false');
+      fd.append('offset_x', String(t.offsetX));
+      fd.append('offset_y', String(t.offsetY));
+      saveSessionBtn.disabled = true;
+      saveProgress.style.display = 'block';
+      saveProgressFill.style.width = '0%';
+      try {
+        const r = await fetch(API + '/api/sessions', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Save failed');
+        const sid = data.session_id;
+        const poll = setInterval(async () => {
+          const st = await fetch(API + `/api/sessions/${sid}/save-status`).then(x=>x.json());
+          saveProgressFill.style.width = st.progress + '%';
+          if (st.done) {
+            clearInterval(poll);
+            saveSessionBtn.disabled = false;
+            saveProgress.style.display = 'none';
+            if (st.error) { toast(st.error, 'error'); return; }
+            toast('Session saved');
+            loadSessions();
+          }
+        }, 400);
+      } catch (e) {
+        toast(e.message, 'error');
+        saveSessionBtn.disabled = false;
+        saveProgress.style.display = 'none';
+      }
+    }
+    saveSessionBtn.addEventListener('click', saveSession);
+
+    async function loadSessions() {
+      const list = await fetch(API + '/api/sessions').then(r=>r.json());
+      sessionList.innerHTML = list.map(s => {
+        const processing = s.status === 'processing';
+        return `
+        <div class="session-item">
+          <div>
+            <div class="name">${s.name}</div>
+            <div class="meta">${s.created_at}${processing ? ' (exporting...)' : ''}</div>
+          </div>
+          <div>
+            <button class="btn btn-ghost" onclick="loadSession(${s.id})" ${processing ? 'disabled' : ''}>Load</button>
+            <button class="btn btn-ghost" onclick="deleteSession(${s.id})">Delete</button>
+          </div>
+        </div>
+      `}).join('') || '<div class="session-item">No saved sessions</div>';
+    }
+
+    async function loadSession(id) {
+      const s = await fetch(API + `/api/sessions/${id}`).then(r=>r.json());
+      if (!s.video_url) {
+        if (s.status === 'processing') {
+          toast('Session still exporting. Try again in a moment.', 'error');
+        } else {
+          toast('No video in session.', 'error');
+        }
+        return;
+      }
+      sessionData = { video_path: s.video_path, csv_path: s.csv_path, video_info: s.video_info, session_db_id: id };
+      gazeTimeline = [];
+      isLoadedSession = true;
+      video.src = API + s.video_url;
+      setupPlayer();
+      toast('Session loaded.');
+    }
+
+    async function deleteSession(id) {
+      await fetch(API + `/api/sessions/${id}`, { method: 'DELETE' });
+      loadSessions();
+      toast('Session deleted');
+    }
+
+    function toast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.className = 'toast ' + type;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    loadSessions();
+  </script>
+</body>
+</html>

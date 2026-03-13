@@ -1,0 +1,275 @@
+"""FastAPI application for gaze data processor."""
+
+import os
+import shutil
+import uuid
+from pathlib import Path
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from .video_processor import get_video_info, export_video_with_gaze
+from .gaze_processor import get_gaze_timeline
+from .database import init_db, save_session, load_session, list_sessions, delete_session, update_session_output_sync
+
+BASE_DIR = Path(__file__).parent.parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+EXPORT_DIR = BASE_DIR / "exports"
+SESSIONS_DIR = BASE_DIR / "sessions_data"
+UPLOAD_DIR.mkdir(exist_ok=True)
+EXPORT_DIR.mkdir(exist_ok=True)
+SESSIONS_DIR.mkdir(exist_ok=True)
+
+# Track export progress
+export_progress = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+    # Cleanup temp files on shutdown optional
+
+
+app = FastAPI(title="EyeTrackVR Gaze Processor", lifespan=lifespan)
+
+
+@app.post("/api/upload")
+async def upload_files(
+    video: UploadFile = File(...),
+    csv: UploadFile = File(...),
+):
+    """Upload video and CSV, process and return gaze timeline + video info."""
+    session_id = str(uuid.uuid4())[:8]
+    video_path = UPLOAD_DIR / f"{session_id}_video{Path(video.filename).suffix}"
+    csv_path = UPLOAD_DIR / f"{session_id}_gaze.csv"
+
+    try:
+        with open(video_path, "wb") as f:
+            shutil.copyfileobj(video.file, f)
+        with open(csv_path, "wb") as f:
+            shutil.copyfileobj(csv.file, f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    info = get_video_info(str(video_path))
+    timeline = get_gaze_timeline(
+        str(csv_path),
+        video_fps=info["fps"],
+        video_width=info["width"],
+        video_height=info["height"],
+        video_frame_count=info["frame_count"],
+    )
+
+    return {
+        "session_id": session_id,
+        "video_path": str(video_path),
+        "csv_path": str(csv_path),
+        "video_info": info,
+        "gaze_timeline": timeline,
+        "video_url": f"/api/video/{session_id}",
+    }
+
+
+@app.get("/api/video/{session_id}")
+async def serve_video(session_id: str):
+    """Stream uploaded video for playback."""
+    matches = list(UPLOAD_DIR.glob(f"{session_id}_video*"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return FileResponse(matches[0], media_type="video/mp4")
+
+
+@app.post("/api/export")
+async def export_video(
+    background_tasks: BackgroundTasks,
+    video_path: str = Form(...),
+    csv_path: str = Form(...),
+    flip_x: str = Form("false"),
+    flip_y: str = Form("false"),
+    offset_x: int = Form(0),
+    offset_y: int = Form(0),
+):
+    """Export video with gaze overlay. Returns export_id for polling progress."""
+    if not os.path.exists(video_path) or not os.path.exists(csv_path):
+        raise HTTPException(status_code=400, detail="Video or CSV file not found")
+
+    export_id = str(uuid.uuid4())[:8]
+    output_path = EXPORT_DIR / f"gaze_overlay_{export_id}.mp4"
+    export_progress[export_id] = {"progress": 0, "done": False, "path": str(output_path)}
+
+    def update_progress(pct):
+        export_progress[export_id]["progress"] = pct
+        if pct >= 100:
+            export_progress[export_id]["done"] = True
+
+    def run_export():
+        try:
+            export_video_with_gaze(
+                video_path, csv_path, str(output_path), update_progress,
+                flip_x=flip_x.lower() == "true",
+                flip_y=flip_y.lower() == "true",
+                offset_x=int(offset_x),
+                offset_y=int(offset_y),
+            )
+        except Exception as e:
+            export_progress[export_id]["error"] = str(e)
+            export_progress[export_id]["done"] = True
+
+    background_tasks.add_task(run_export)
+    return {"export_id": export_id, "status": "processing"}
+
+
+@app.get("/api/export/{export_id}/status")
+async def export_status(export_id: str):
+    """Poll export progress."""
+    if export_id not in export_progress:
+        raise HTTPException(status_code=404, detail="Export not found")
+    data = export_progress[export_id]
+    result = {"progress": data["progress"], "done": data["done"]}
+    if data.get("error"):
+        result["error"] = data["error"]
+    if data["done"] and not data.get("error"):
+        result["download_url"] = f"/api/download/{export_id}"
+    return result
+
+
+@app.get("/api/download/{export_id}")
+async def download_export(export_id: str):
+    """Download exported video."""
+    if export_id not in export_progress:
+        raise HTTPException(status_code=404, detail="Export not found")
+    path = export_progress[export_id].get("path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not ready")
+    return FileResponse(path, filename=f"gaze_overlay_{export_id}.mp4")
+
+
+save_progress = {}  # session_id -> {progress, done, error}
+
+
+@app.post("/api/sessions")
+async def create_session(
+    background_tasks: BackgroundTasks,
+    name: str = Form(...),
+    video_path: str = Form(""),
+    csv_path: str = Form(""),
+    video_info: str = Form("{}"),
+    gaze_timeline: str = Form("[]"),
+    session_upload_id: str = Form(""),
+    compact: str = Form("false"),
+    flip_x: str = Form("false"),
+    flip_y: str = Form("false"),
+    offset_x: int = Form(0),
+    offset_y: int = Form(0),
+):
+    """Save session: exports video with gaze overlay and stores it."""
+    import json
+    vid_info = json.loads(video_info)
+    timeline = json.loads(gaze_timeline)
+    if not video_path or not os.path.exists(video_path) or not csv_path or not os.path.exists(csv_path):
+        raise HTTPException(status_code=400, detail="Video and CSV files required")
+    sid = await save_session(
+        name, csv_path or None, video_path or None, vid_info, timeline,
+        session_upload_id=session_upload_id or None,
+        status="processing",
+    )
+    session_dir = SESSIONS_DIR / str(sid)
+    session_dir.mkdir(exist_ok=True)
+    output_path = session_dir / "output.mp4"
+    save_progress[sid] = {"progress": 0, "done": False, "error": None}
+    scale = 0.75 if compact.lower() == "true" else 1.0
+
+    def run_save():
+        try:
+            export_video_with_gaze(
+                video_path, csv_path, str(output_path),
+                progress_callback=lambda p: save_progress.__setitem__(sid, {**save_progress.get(sid, {}), "progress": p}),
+                scale=scale,
+                flip_x=flip_x.lower() == "true",
+                flip_y=flip_y.lower() == "true",
+                offset_x=int(offset_x),
+                offset_y=int(offset_y),
+            )
+            save_progress[sid] = {"progress": 100, "done": True, "error": None}
+            update_session_output_sync(sid, str(output_path))
+        except Exception as e:
+            save_progress[sid] = {"progress": 0, "done": True, "error": str(e)}
+
+    background_tasks.add_task(run_save)
+    return {"session_id": sid, "status": "processing", "message": "Exporting and saving..."}
+
+
+@app.get("/api/sessions")
+async def get_sessions():
+    """List all saved sessions."""
+    return await list_sessions()
+
+
+@app.get("/api/sessions/{session_id}/save-status")
+async def get_save_status(session_id: int):
+    """Poll save/export progress."""
+    if session_id not in save_progress:
+        s = await load_session(session_id)
+        if s and s.get("status") == "ready":
+            return {"progress": 100, "done": True, "error": None}
+        return {"progress": 0, "done": False, "error": None}
+    d = save_progress[session_id]
+    return {"progress": d["progress"], "done": d["done"], "error": d.get("error")}
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: int):
+    """Load a saved session."""
+    s = await load_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    output_path = SESSIONS_DIR / str(session_id) / "output.mp4"
+    stored_path = s.get("output_path") or ""
+    if output_path.exists():
+        s["video_url"] = f"/api/session-video/{session_id}"
+        s["status"] = "ready"
+    elif stored_path and os.path.exists(stored_path):
+        s["video_url"] = f"/api/session-video/{session_id}"
+        s["status"] = "ready"
+    else:
+        s["video_url"] = None
+        s["status"] = s.get("status") or "processing"
+    return s
+
+
+@app.get("/api/session-video/{session_id}")
+async def serve_session_video(session_id: int):
+    """Serve saved session video (gaze overlay baked in)."""
+    output_path = SESSIONS_DIR / str(session_id) / "output.mp4"
+    if output_path.exists():
+        return FileResponse(str(output_path), media_type="video/mp4")
+    s = await load_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    path = s.get("output_path") or ""
+    if path and os.path.exists(path):
+        return FileResponse(path, media_type="video/mp4")
+    raise HTTPException(status_code=404, detail="Video not found")
+
+
+@app.delete("/api/sessions/{session_id}")
+async def remove_session(session_id: int):
+    """Delete a session and its stored files."""
+    session_dir = SESSIONS_DIR / str(session_id)
+    if session_dir.exists():
+        shutil.rmtree(session_dir, ignore_errors=True)
+    if session_id in save_progress:
+        del save_progress[session_id]
+    ok = await delete_session(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"message": "Deleted"}
+
+
+# Serve static frontend
+static_dir = Path(__file__).parent.parent / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
