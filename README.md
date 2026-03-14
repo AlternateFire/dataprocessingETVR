@@ -43,4 +43,3 @@ Gaze coordinates are mapped to video pixels. **Accuracy calibration** (below pla
 ## Purpose
 - For a research project @ University of Maryland, College Park
 - Exploring Cursor and agentic development tools to implement systems and feautres
-- Exploring 'prompt engineering,' curious on the limits and extents to the system
